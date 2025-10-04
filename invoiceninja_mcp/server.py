@@ -208,6 +208,96 @@ async def get_invoice_status(invoice_id: str) -> str:
 
 
 @mcp.tool()
+async def get_latest_invoice_for_client(client_id: str) -> str:
+    try:
+        result = await client.list_invoices(
+            client_id=client_id, per_page=1, sort="date|desc"
+        )
+        invoices_data = result.get("data", [])
+
+        if not invoices_data:
+            return f"No invoices found for client ID: {client_id}"
+
+        inv = Invoice(**invoices_data[0])
+
+        output = [f"📄 Latest Invoice for Client {client_id}\n"]
+        output.append(f"Invoice #{inv.get_invoice_number()} (ID: {inv.id})")
+        output.append(f"Status: {inv.get_status_name()}")
+        output.append(f"Total (incl. tax): ${inv.get_amount_incl_tax():.2f}")
+        output.append(f"Balance: ${inv.balance:.2f}")
+        if inv.date:
+            output.append(f"Date: {inv.date}")
+        if inv.due_date:
+            output.append(f"Due Date: {inv.due_date}")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error getting latest invoice: {str(e)}"
+
+
+@mcp.tool()
+async def clone_invoice(invoice_id: str) -> str:
+    try:
+        result = await client.clone_invoice(invoice_id)
+        inv_data = result.get("data", result)
+        inv = Invoice(**inv_data[0])
+
+        output = [f"✅ Invoice cloned successfully!\n"]
+        output.append(f"New Invoice ID: {inv.id}")
+        output.append(f"Invoice Number: {inv.get_invoice_number()}")
+        output.append(f"Status: {inv.get_status_name()}")
+        output.append(f"Total: ${inv.get_amount_incl_tax():.2f}")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error cloning invoice: {str(e)}"
+
+
+@mcp.tool()
+async def update_invoice(invoice_id: str, invoice_data: str) -> str:
+    try:
+        import json
+
+        data = json.loads(invoice_data)
+        result = await client.update_invoice(invoice_id, data)
+        inv_data = result.get("data", result)
+        inv = Invoice(**inv_data)
+
+        output = [f"✅ Invoice updated successfully!\n"]
+        output.append(f"Invoice #{inv.get_invoice_number()} (ID: {inv.id})")
+        output.append(f"Status: {inv.get_status_name()}")
+        output.append(f"Total (incl. tax): ${inv.get_amount_incl_tax():.2f}")
+        if inv.date:
+            output.append(f"Date: {inv.date}")
+        if inv.due_date:
+            output.append(f"Due Date: {inv.due_date}")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error updating invoice: {str(e)}"
+
+
+@mcp.tool()
+async def email_invoice(invoice_id: str) -> str:
+    try:
+        result = await client.bulk_invoices("email", [invoice_id])
+
+        return f"✅ Invoice {invoice_id} has been emailed successfully!\n{json.dumps(result, indent=2)}"
+    except Exception as e:
+        return f"❌ Error emailing invoice: {str(e)}"
+
+
+@mcp.tool()
+async def mark_invoice_sent(invoice_id: str) -> str:
+    try:
+        result = await client.bulk_invoices("mark_sent", [invoice_id])
+
+        return f"✅ Invoice {invoice_id} marked as sent!\n{json.dumps(result, indent=2)}"
+    except Exception as e:
+        return f"❌ Error marking invoice as sent: {str(e)}"
+
+
+@mcp.tool()
 async def list_expenses(per_page: int = 20) -> str:
     try:
         result = await client.list_expenses(per_page=per_page)

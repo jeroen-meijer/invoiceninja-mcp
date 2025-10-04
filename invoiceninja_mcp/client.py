@@ -159,7 +159,7 @@ class InvoiceNinjaClient:
         return await self.put(f"invoices/{invoice_id}", json=invoice_data)
 
     async def clone_invoice(self, invoice_id: str) -> Dict[str, Any]:
-        return await self.post(f"invoices/{invoice_id}/clone")
+        return await self.post("invoices/bulk", json={"action": "clone", "ids": [invoice_id]})
 
     async def bulk_invoices(
         self, action: str, ids: List[str]

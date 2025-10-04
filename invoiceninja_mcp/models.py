@@ -21,7 +21,26 @@ class InvoiceLineItem(BaseModel):
     tax_rate1: Optional[float] = None
     tax_name2: Optional[str] = None
     tax_rate2: Optional[float] = None
+    tax_name3: Optional[str] = None
+    tax_rate3: Optional[float] = None
     line_total: Optional[float] = None
+    type_id: Optional[str] = None
+    task_id: Optional[str] = None
+    expense_id: Optional[str] = None
+    custom_value1: Optional[str] = None
+    custom_value2: Optional[str] = None
+    custom_value3: Optional[str] = None
+    custom_value4: Optional[str] = None
+    date: Optional[str] = None
+    discount: Optional[float] = None
+    is_amount_discount: Optional[bool] = None
+    gross_line_total: Optional[float] = None
+    net_cost: Optional[float] = None
+    product_cost: Optional[float] = None
+    sort_id: Optional[int] = None
+    tax_amount: Optional[float] = None
+    tax_id: Optional[str] = None
+    unit_code: Optional[str] = None
 
 
 class Invoice(BaseModel):
