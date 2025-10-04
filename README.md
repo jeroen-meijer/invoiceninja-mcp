@@ -151,14 +151,13 @@ async def example():
 
 ```
 in-mcp/
-├── src/
-│   └── invoiceninja_mcp/
-│       ├── __init__.py
-│       ├── __main__.py        # Entry point
-│       ├── server.py          # FastMCP server with tools
-│       ├── client.py          # InvoiceNinja API client
-│       ├── config.py          # Settings management
-│       └── models.py          # Pydantic models
+└── invoiceninja_mcp/
+│  ├── __init__.py
+│  ├── __main__.py        # Entry point
+│  ├── server.py          # FastMCP server with tools
+│  ├── client.py          # InvoiceNinja API client
+│  ├── config.py          # Settings management
+│  └── models.py          # Pydantic models
 ├── pyproject.toml             # Dependencies
 ├── .env                       # Your config (gitignored)
 ├── .env.example               # Example config

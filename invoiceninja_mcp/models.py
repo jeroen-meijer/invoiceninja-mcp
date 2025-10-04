@@ -1,23 +1,18 @@
-"""Pydantic models for InvoiceNinja data structures."""
-
-from typing import Optional, List, Any, Dict
+from typing import Optional, List
 from pydantic import BaseModel, Field
-from datetime import datetime
 
 
-# Status mapping for invoices
 INVOICE_STATUS = {
     1: "Draft",
     2: "Sent",
     3: "Viewed",
     4: "Approved",
     5: "Partial",
-    6: "Paid"
+    6: "Paid",
 }
 
 
 class InvoiceLineItem(BaseModel):
-    """Invoice line item model."""
     product_key: Optional[str] = None
     notes: Optional[str] = None
     cost: Optional[float] = None
@@ -30,7 +25,6 @@ class InvoiceLineItem(BaseModel):
 
 
 class Invoice(BaseModel):
-    """Invoice model."""
     id: str
     user_id: Optional[str] = None
     assigned_user_id: Optional[str] = None
@@ -93,24 +87,19 @@ class Invoice(BaseModel):
     is_deleted: Optional[bool] = False
 
     def get_invoice_number(self) -> str:
-        """Get the invoice number (prefer invoice_number, fallback to number)."""
         return self.invoice_number or self.number or f"INV-{self.id[:8]}"
 
     def get_status_name(self) -> str:
-        """Get human-readable status name."""
         return INVOICE_STATUS.get(self.status_id, f"Unknown ({self.status_id})")
 
     def get_amount_incl_tax(self) -> float:
-        """Get total amount including tax."""
         return self.amount
 
     def get_amount_excl_tax(self) -> float:
-        """Get total amount excluding tax."""
         return self.amount - (self.total_taxes or 0)
 
 
 class Expense(BaseModel):
-    """Expense model."""
     id: str
     user_id: Optional[str] = None
     assigned_user_id: Optional[str] = None
@@ -152,7 +141,6 @@ class Expense(BaseModel):
 
 
 class Client(BaseModel):
-    """Client model."""
     id: str
     user_id: Optional[str] = None
     assigned_user_id: Optional[str] = None
@@ -188,7 +176,6 @@ class Client(BaseModel):
 
 
 class Vendor(BaseModel):
-    """Vendor model."""
     id: str
     user_id: Optional[str] = None
     assigned_user_id: Optional[str] = None
@@ -214,7 +201,6 @@ class Vendor(BaseModel):
 
 
 class ExpenseCategory(BaseModel):
-    """Expense category model."""
     id: str
     user_id: Optional[str] = None
     name: str
