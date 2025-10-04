@@ -84,6 +84,18 @@ async def test_mcp_create_vendor(client):
 
 
 @pytest.mark.asyncio
+async def test_search_vendors(client):
+    await client.create_vendor({"name": "Versio Hosting BV"})
+    await client.create_vendor({"name": "Google Cloud"})
+
+    result = await client.list_vendors(per_page=500)
+    vendors = result.get("data", [])
+
+    versio_matches = [v for v in vendors if "versio" in v["name"].lower()]
+    assert len(versio_matches) > 0
+
+
+@pytest.mark.asyncio
 async def test_btw_quarterly_report(client):
     current_year = datetime.now().year
     start_date, end_date = (f"{current_year}-01-01", f"{current_year}-03-31")

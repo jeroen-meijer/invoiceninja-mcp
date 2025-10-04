@@ -1,5 +1,5 @@
 import httpx
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from .config import settings
 
 
@@ -152,3 +152,16 @@ class InvoiceNinjaClient:
 
     async def create_vendor(self, vendor_data: Dict[str, Any]) -> Dict[str, Any]:
         return await self.post("vendors", json=vendor_data)
+
+    async def update_invoice(
+        self, invoice_id: str, invoice_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await self.put(f"invoices/{invoice_id}", json=invoice_data)
+
+    async def clone_invoice(self, invoice_id: str) -> Dict[str, Any]:
+        return await self.post(f"invoices/{invoice_id}/clone")
+
+    async def bulk_invoices(
+        self, action: str, ids: List[str]
+    ) -> Dict[str, Any]:
+        return await self.post("invoices/bulk", json={"action": action, "ids": ids})

@@ -69,6 +69,40 @@ async def list_vendors(per_page: int = 100) -> str:
 
 
 @mcp.tool()
+async def search_vendors(search_term: str) -> str:
+    try:
+        result = await client.list_vendors(per_page=500)
+        vendors_data = result.get("data", [])
+
+        if not vendors_data:
+            return "No vendors found."
+
+        search_lower = search_term.lower()
+        matches = []
+
+        for vendor_data in vendors_data:
+            v = Vendor(**vendor_data)
+            vendor_name = (v.name or "").lower()
+
+            if search_lower in vendor_name or vendor_name in search_lower:
+                score = len(set(search_lower.split()) & set(vendor_name.split()))
+                matches.append((score, v))
+
+        matches.sort(key=lambda x: x[0], reverse=True)
+
+        if not matches:
+            return f"No vendors found matching '{search_term}'"
+
+        output = [f"Found {len(matches)} vendor(s) matching '{search_term}':\n"]
+        for score, v in matches[:10]:
+            output.append(f"• {v.name or 'Unnamed'} (ID: {v.id})")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error searching vendors: {str(e)}"
+
+
+@mcp.tool()
 async def list_expense_categories(per_page: int = 100) -> str:
     try:
         result = await client.list_expense_categories(per_page=per_page)
