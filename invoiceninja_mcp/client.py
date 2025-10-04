@@ -89,10 +89,19 @@ class InvoiceNinjaClient:
         per_page: int = 20,
         sort: str = "expense_date|desc",
         include: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        vendor_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         params = {"per_page": per_page, "sort": sort}
         if include:
             params["include"] = include
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        if vendor_id:
+            params["vendor_id"] = vendor_id
         return await self.get("expenses", params=params)
 
     async def get_expense(self, expense_id: str) -> Dict[str, Any]:
@@ -158,6 +167,11 @@ class InvoiceNinjaClient:
     ) -> Dict[str, Any]:
         return await self.put(f"invoices/{invoice_id}", json=invoice_data)
 
+    async def update_expense(
+        self, expense_id: str, expense_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await self.put(f"expenses/{expense_id}", json=expense_data)
+
     async def clone_invoice(self, invoice_id: str) -> Dict[str, Any]:
         return await self.post("invoices/bulk", json={"action": "clone", "ids": [invoice_id]})
 
@@ -165,3 +179,11 @@ class InvoiceNinjaClient:
         self, action: str, ids: List[str]
     ) -> Dict[str, Any]:
         return await self.post("invoices/bulk", json={"action": action, "ids": ids})
+
+    async def download_invoice_pdf(self, invoice_id: str) -> bytes:
+        url = f"{self.base_url}/invoices/{invoice_id}/download"
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(url, headers=self.headers)
+            response.raise_for_status()
+            return response.content

@@ -123,3 +123,36 @@ async def test_btw_quarterly_report(client):
 
     assert total_btw_invoices >= 0
     assert total_btw_expenses >= 0
+
+
+@pytest.mark.asyncio
+async def test_download_invoice_pdf(client):
+    result = await client.list_invoices(per_page=1)
+    invoices_data = result.get("data", [])
+    if invoices_data:
+        invoice_id = invoices_data[0]["id"]
+        pdf_content = await client.download_invoice_pdf(invoice_id)
+        assert isinstance(pdf_content, bytes)
+        assert len(pdf_content) > 0
+        assert pdf_content.startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_get_invoice_with_invitations(client):
+    result = await client.list_invoices(per_page=1)
+    invoices_data = result.get("data", [])
+    if invoices_data:
+        invoice_id = invoices_data[0]["id"]
+        detail_result = await client.get_invoice(invoice_id)
+        inv_detail = Invoice(**detail_result.get("data", detail_result))
+        assert inv_detail.invitations is not None
+
+
+@pytest.mark.asyncio
+async def test_mark_invoice_paid(client):
+    result = await client.list_invoices(per_page=1, status="sent")
+    invoices_data = result.get("data", [])
+    if invoices_data:
+        invoice_id = invoices_data[0]["id"]
+        mark_paid_result = await client.bulk_invoices("mark_paid", [invoice_id])
+        assert "data" in mark_paid_result or mark_paid_result.get("message")

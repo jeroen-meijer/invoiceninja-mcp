@@ -67,6 +67,52 @@ async def test_create_expense(client):
 
 
 @pytest.mark.asyncio
+async def test_update_expense(client):
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    draft_expense_data = {
+        "amount": 100.00,
+        "expense_date": today,
+        "public_notes": "TEST EXPENSE - Before update",
+        "private_notes": "Created by pytest",
+        "should_be_invoiced": False,
+    }
+
+    create_result = await client.create_expense(draft_expense_data)
+    expense = Expense(**create_result.get("data", create_result))
+
+    update_data = {
+        "amount": 150.75,
+        "public_notes": "TEST EXPENSE - After update",
+        "private_notes": "Updated by pytest",
+    }
+
+    update_result = await client.update_expense(expense.id, update_data)
+    updated_expense = Expense(**update_result.get("data", update_result))
+
+    assert updated_expense.id == expense.id
+    assert updated_expense.amount == 150.75
+    assert updated_expense.public_notes == "TEST EXPENSE - After update"
+
+
+@pytest.mark.asyncio
+async def test_list_expenses_with_date_range(client):
+    start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    end_date = datetime.now().strftime("%Y-%m-%d")
+
+    result = await client.list_expenses(
+        per_page=10, start_date=start_date, end_date=end_date
+    )
+    expenses_data = result.get("data", [])
+
+    assert isinstance(expenses_data, list)
+    for expense_data in expenses_data:
+        expense = Expense(**expense_data)
+        if expense.expense_date:
+            assert start_date <= expense.expense_date <= end_date
+
+
+@pytest.mark.asyncio
 async def test_create_vendor(client):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     vendor_data = {

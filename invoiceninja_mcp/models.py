@@ -92,6 +92,7 @@ class Invoice(BaseModel):
     custom_surcharge_tax3: Optional[bool] = False
     custom_surcharge_tax4: Optional[bool] = False
     line_items: List[InvoiceLineItem] = Field(default_factory=list)
+    invitations: Optional[List[dict]] = Field(default_factory=list)
     entity_type: Optional[str] = "invoice"
     reminder1_sent: Optional[str] = None
     reminder2_sent: Optional[str] = None

@@ -1,6 +1,10 @@
 from fastmcp import FastMCP
 from typing import Optional
 import json
+import subprocess
+import tempfile
+import os
+from pathlib import Path
 
 from .client import InvoiceNinjaClient
 from .models import Invoice, Expense, Client, Vendor, ExpenseCategory
@@ -298,9 +302,81 @@ async def mark_invoice_sent(invoice_id: str) -> str:
 
 
 @mcp.tool()
-async def list_expenses(per_page: int = 20) -> str:
+async def mark_invoice_paid(invoice_id: str) -> str:
     try:
-        result = await client.list_expenses(per_page=per_page)
+        result = await client.bulk_invoices("mark_paid", [invoice_id])
+
+        return f"✅ Invoice {invoice_id} marked as paid!\n{json.dumps(result, indent=2)}"
+    except Exception as e:
+        return f"❌ Error marking invoice as paid: {str(e)}"
+
+
+@mcp.tool()
+async def preview_invoice_pdf(invoice_id: str) -> str:
+    try:
+        inv_result = await client.get_invoice(invoice_id)
+        inv_data = inv_result.get("data", inv_result)
+        inv = Invoice(**inv_data)
+
+        pdf_content = await client.download_invoice_pdf(invoice_id)
+
+        invoice_number = inv.get_invoice_number()
+        filename = f"invoice_{invoice_number}.pdf"
+        temp_dir = Path(tempfile.gettempdir())
+        pdf_path = temp_dir / filename
+
+        with open(pdf_path, "wb") as f:
+            f.write(pdf_content)
+
+        if os.name == "posix":
+            if os.uname().sysname == "Darwin":
+                subprocess.run(["open", str(pdf_path)])
+            else:
+                subprocess.run(["xdg-open", str(pdf_path)])
+        elif os.name == "nt":
+            os.startfile(str(pdf_path))
+
+        return f"✅ Invoice PDF downloaded and opened!\nFile saved to: {pdf_path}"
+    except Exception as e:
+        return f"❌ Error previewing invoice PDF: {str(e)}"
+
+
+@mcp.tool()
+async def get_invoice_preview_url(invoice_id: str) -> str:
+    try:
+        inv_result = await client.get_invoice(invoice_id)
+        inv_data = inv_result.get("data", inv_result)
+        inv = Invoice(**inv_data)
+
+        if inv.invitations and len(inv.invitations) > 0:
+            invitation_key = inv.invitations[0].get("key")
+            if invitation_key:
+                base_url = client.base_url.replace("/api/v1", "")
+                preview_url = f"{base_url}/client/invoice/{invitation_key}"
+
+                return f"📄 Invoice #{inv.get_invoice_number()}\n\n🔗 Preview URL:\n{preview_url}\n\nOpen this URL in your browser to view the invoice PDF."
+            else:
+                return f"❌ No invitation key found for invoice {invoice_id}"
+        else:
+            return f"❌ No invitations found for invoice {invoice_id}"
+    except Exception as e:
+        return f"❌ Error getting invoice preview URL: {str(e)}"
+
+
+@mcp.tool()
+async def list_expenses(
+    per_page: int = 20,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    vendor_id: Optional[str] = None,
+) -> str:
+    try:
+        result = await client.list_expenses(
+            per_page=per_page,
+            start_date=start_date,
+            end_date=end_date,
+            vendor_id=vendor_id,
+        )
         expenses_data = result.get("data", [])
 
         if not expenses_data:
@@ -313,6 +389,8 @@ async def list_expenses(per_page: int = 20) -> str:
             output.append(f"   Amount: ${exp.amount:.2f}")
             if exp.expense_date:
                 output.append(f"   Date: {exp.expense_date}")
+            if exp.vendor_id:
+                output.append(f"   Vendor ID: {exp.vendor_id}")
             if exp.public_notes:
                 output.append(f"   Notes: {exp.public_notes}")
 
@@ -533,6 +611,27 @@ async def create_expense(
         return f"✅ Expense created successfully!\nID: {exp.id}\nAmount: ${exp.amount:.2f}\nDate: {exp.expense_date}"
     except Exception as e:
         return f"❌ Error creating expense: {str(e)}"
+
+
+@mcp.tool()
+async def update_expense(expense_id: str, expense_data: str) -> str:
+    try:
+        data = json.loads(expense_data)
+        result = await client.update_expense(expense_id, data)
+        exp_data = result.get("data", result)
+        exp = Expense(**exp_data)
+
+        output = [f"✅ Expense updated successfully!\n"]
+        output.append(f"ID: {exp.id}")
+        output.append(f"Amount: ${exp.amount:.2f}")
+        if exp.expense_date:
+            output.append(f"Date: {exp.expense_date}")
+        if exp.vendor_id:
+            output.append(f"Vendor ID: {exp.vendor_id}")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error updating expense: {str(e)}"
 
 
 @mcp.tool()
