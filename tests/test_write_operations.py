@@ -1,6 +1,6 @@
 import pytest
 from datetime import datetime, timedelta
-from invoiceninja_mcp.models import Invoice, Expense
+from invoiceninja_mcp.models import Invoice, Expense, Vendor
 
 
 async def get_test_client_id(client):
@@ -64,3 +64,21 @@ async def test_create_expense(client):
 
     assert expense.id is not None
     assert expense.amount == 25.50
+
+
+@pytest.mark.asyncio
+async def test_create_vendor(client):
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    vendor_data = {
+        "name": f"TEST-VENDOR-{timestamp}",
+        "phone": "555-1234",
+        "website": "https://test.example.com",
+    }
+
+    result = await client.create_vendor(vendor_data)
+    vendor_result = result.get("data", result)
+    vendor = Vendor(**vendor_result)
+
+    assert vendor.id is not None
+    assert vendor.name.startswith("TEST-VENDOR-")
+    assert vendor.phone == "555-1234"

@@ -1,5 +1,6 @@
 import pytest
-from invoiceninja_mcp.models import Invoice, Expense, Client
+from datetime import datetime
+from invoiceninja_mcp.models import Invoice, Expense, Client, Vendor
 
 
 @pytest.mark.asyncio
@@ -61,9 +62,29 @@ async def test_list_expense_categories(client):
 
 
 @pytest.mark.asyncio
-async def test_btw_quarterly_report(client):
-    from datetime import datetime
+async def test_mcp_create_expense(client):
+    today = datetime.now().strftime("%Y-%m-%d")
+    expense_data = {
+        "amount": 50.25,
+        "expense_date": today,
+        "public_notes": "TEST MCP EXPENSE",
+    }
+    result = await client.create_expense(expense_data)
+    expense = result.get("data", result)
+    assert expense["amount"] == 50.25
 
+
+@pytest.mark.asyncio
+async def test_mcp_create_vendor(client):
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    vendor_data = {"name": f"TEST-MCP-VENDOR-{timestamp}", "phone": "555-9999"}
+    result = await client.create_vendor(vendor_data)
+    vendor = result.get("data", result)
+    assert f"TEST-MCP-VENDOR-{timestamp}" in vendor["name"]
+
+
+@pytest.mark.asyncio
+async def test_btw_quarterly_report(client):
     current_year = datetime.now().year
     start_date, end_date = (f"{current_year}-01-01", f"{current_year}-03-31")
 

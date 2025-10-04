@@ -149,3 +149,6 @@ class InvoiceNinjaClient:
 
     async def create_expense(self, expense_data: Dict[str, Any]) -> Dict[str, Any]:
         return await self.post("expenses", json=expense_data)
+
+    async def create_vendor(self, vendor_data: Dict[str, Any]) -> Dict[str, Any]:
+        return await self.post("vendors", json=vendor_data)

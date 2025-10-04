@@ -375,5 +375,76 @@ async def get_invoice_report(start_date: str, end_date: str) -> str:
         return f"❌ Error getting invoice report: {str(e)}"
 
 
+@mcp.tool()
+async def create_expense(
+    amount: float,
+    expense_date: str,
+    vendor_id: Optional[str] = None,
+    category_id: Optional[str] = None,
+    public_notes: Optional[str] = None,
+    private_notes: Optional[str] = None,
+    tax_rate1: Optional[float] = None,
+    tax_name1: Optional[str] = None,
+) -> str:
+    try:
+        expense_data = {"amount": amount, "expense_date": expense_date}
+
+        if vendor_id:
+            expense_data["vendor_id"] = vendor_id
+        if category_id:
+            expense_data["category_id"] = category_id
+        if public_notes:
+            expense_data["public_notes"] = public_notes
+        if private_notes:
+            expense_data["private_notes"] = private_notes
+        if tax_rate1 is not None:
+            expense_data["tax_rate1"] = tax_rate1
+        if tax_name1:
+            expense_data["tax_name1"] = tax_name1
+
+        result = await client.create_expense(expense_data)
+        exp_data = result.get("data", result)
+        exp = Expense(**exp_data)
+
+        return f"✅ Expense created successfully!\nID: {exp.id}\nAmount: ${exp.amount:.2f}\nDate: {exp.expense_date}"
+    except Exception as e:
+        return f"❌ Error creating expense: {str(e)}"
+
+
+@mcp.tool()
+async def create_vendor(
+    name: str,
+    phone: Optional[str] = None,
+    website: Optional[str] = None,
+    address1: Optional[str] = None,
+    city: Optional[str] = None,
+    postal_code: Optional[str] = None,
+    vat_number: Optional[str] = None,
+) -> str:
+    try:
+        vendor_data = {"name": name}
+
+        if phone:
+            vendor_data["phone"] = phone
+        if website:
+            vendor_data["website"] = website
+        if address1:
+            vendor_data["address1"] = address1
+        if city:
+            vendor_data["city"] = city
+        if postal_code:
+            vendor_data["postal_code"] = postal_code
+        if vat_number:
+            vendor_data["vat_number"] = vat_number
+
+        result = await client.create_vendor(vendor_data)
+        vendor_data_result = result.get("data", result)
+        vendor = Vendor(**vendor_data_result)
+
+        return f"✅ Vendor created successfully!\nID: {vendor.id}\nName: {vendor.name}"
+    except Exception as e:
+        return f"❌ Error creating vendor: {str(e)}"
+
+
 if __name__ == "__main__":
     mcp.run()
