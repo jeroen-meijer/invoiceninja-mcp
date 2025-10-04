@@ -247,6 +247,98 @@ async def get_tax_report_quarterly(year: int, quarter: int) -> str:
         return f"❌ Error getting tax report: {str(e)}"
 
 
+async def _generate_btw_report(
+    year: int, quarter: int, api_client: InvoiceNinjaClient
+) -> str:
+    if quarter not in [1, 2, 3, 4]:
+        return "❌ Quarter must be 1, 2, 3, or 4"
+
+    start_date, end_date = get_quarter_dates(year, quarter)
+
+    report = {
+        "year": year,
+        "quarter": quarter,
+        "total_billed": 0.0,
+        "total_billed_ex_btw": 0.0,
+        "total_btw_invoices": 0.0,
+        "total_expenses": 0.0,
+        "total_btw_expenses": 0.0,
+        "total_difference": 0.0,
+    }
+
+    invoices_result = await api_client.list_invoices(
+        per_page=500,
+        sort="date|desc",
+        include="client",
+        without_deleted_clients=True,
+    )
+    invoices = invoices_result.get("data", [])
+
+    for invoice in invoices:
+        if invoice.get("date"):
+            invoice_date = invoice["date"]
+            if start_date <= invoice_date <= end_date:
+                btw = invoice.get("total_taxes", 0) or 0
+                amount = invoice.get("amount", 0) or 0
+                ex_btw = amount - btw
+
+                report["total_billed"] += amount
+                report["total_billed_ex_btw"] += ex_btw
+                report["total_btw_invoices"] += btw
+
+    expenses_result = await api_client.list_expenses(
+        per_page=500, sort="expense_date|desc", include="client,vendor,category"
+    )
+    expenses = expenses_result.get("data", [])
+
+    for expense in expenses:
+        expense_date = expense.get("expense_date") or expense.get("date")
+        if expense_date and start_date <= expense_date <= end_date:
+            expense_amount = expense.get("amount", 0) or 0
+            tax_rate1 = expense.get("tax_rate1", 0) or 0
+
+            expense_btw = 0
+            if tax_rate1 == 21:
+                expense_btw = expense_amount * 0.21
+                report["total_btw_expenses"] += expense_btw
+
+            report["total_expenses"] += expense_amount
+
+    report["total_difference"] = (
+        report["total_btw_invoices"] - report["total_btw_expenses"]
+    )
+
+    table_data = [
+        ["Quarter", f"{year}-Q{quarter}"],
+        ["Total amount billed", f"€{report['total_billed']:.2f}"],
+        ["Exact amount billed ex BTW", f"€{report['total_billed_ex_btw']:.2f}"],
+        [
+            "Total BTW amount over invoices",
+            f"€{report['total_btw_invoices']:.2f}",
+        ],
+        ["Total expenses", f"€{report['total_expenses']:.2f}"],
+        ["BTW paid over these expenses", f"€{report['total_btw_expenses']:.2f}"],
+        ["Total BTW difference", f"€{report['total_difference']:.2f}"],
+    ]
+
+    output = [f"📊 BTW Quarterly Report for Q{quarter} {year}\n"]
+    output.append(f"Period: {start_date} to {end_date}\n")
+    output.append("| Description | Amount |")
+    output.append("|-------------|--------|")
+    for row in table_data:
+        output.append(f"| {row[0]} | {row[1]} |")
+
+    return "\n".join(output)
+
+
+@mcp.tool()
+async def get_btw_quarterly_report(year: int, quarter: int) -> str:
+    try:
+        return await _generate_btw_report(year, quarter, client)
+    except Exception as e:
+        return f"❌ Error generating BTW report: {str(e)}"
+
+
 @mcp.tool()
 async def get_tax_report_custom(start_date: str, end_date: str) -> str:
     try:

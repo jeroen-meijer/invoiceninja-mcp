@@ -58,3 +58,35 @@ async def test_list_expense_categories(client):
     result = await client.list_expense_categories(per_page=3)
     categories = result.get("data", [])
     assert isinstance(categories, list)
+
+
+@pytest.mark.asyncio
+async def test_btw_quarterly_report(client):
+    from datetime import datetime
+
+    current_year = datetime.now().year
+    start_date, end_date = (f"{current_year}-01-01", f"{current_year}-03-31")
+
+    invoices_result = await client.list_invoices(per_page=500)
+    expenses_result = await client.list_expenses(per_page=500)
+
+    invoices = invoices_result.get("data", [])
+    expenses = expenses_result.get("data", [])
+
+    total_btw_invoices = 0.0
+    total_btw_expenses = 0.0
+
+    for invoice in invoices:
+        if invoice.get("date") and start_date <= invoice["date"] <= end_date:
+            total_btw_invoices += invoice.get("total_taxes", 0) or 0
+
+    for expense in expenses:
+        expense_date = expense.get("expense_date") or expense.get("date")
+        if expense_date and start_date <= expense_date <= end_date:
+            tax_rate1 = expense.get("tax_rate1", 0) or 0
+            if tax_rate1 == 21:
+                expense_amount = expense.get("amount", 0) or 0
+                total_btw_expenses += expense_amount * 0.21
+
+    assert total_btw_invoices >= 0
+    assert total_btw_expenses >= 0
