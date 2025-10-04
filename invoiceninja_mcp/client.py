@@ -64,34 +64,71 @@ class InvoiceNinjaClient:
         status: Optional[str] = None,
         client_id: Optional[str] = None,
         per_page: int = 20,
+        sort: str = "date|desc",
+        include: Optional[str] = None,
+        without_deleted_clients: bool = True,
     ) -> Dict[str, Any]:
-        params = {"per_page": per_page}
+        params = {
+            "per_page": per_page,
+            "sort": sort,
+            "without_deleted_clients": "true" if without_deleted_clients else "false",
+        }
         if status:
             params["status"] = status
         if client_id:
             params["client_id"] = client_id
+        if include:
+            params["include"] = include
         return await self.get("invoices", params=params)
 
     async def get_invoice(self, invoice_id: str) -> Dict[str, Any]:
         return await self.get(f"invoices/{invoice_id}")
 
-    async def list_expenses(self, per_page: int = 20) -> Dict[str, Any]:
-        params = {"per_page": per_page}
+    async def list_expenses(
+        self,
+        per_page: int = 20,
+        sort: str = "expense_date|desc",
+        include: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        params = {"per_page": per_page, "sort": sort}
+        if include:
+            params["include"] = include
         return await self.get("expenses", params=params)
 
     async def get_expense(self, expense_id: str) -> Dict[str, Any]:
         return await self.get(f"expenses/{expense_id}")
 
-    async def list_clients(self, per_page: int = 100) -> Dict[str, Any]:
-        params = {"per_page": per_page}
+    async def list_clients(
+        self,
+        per_page: int = 100,
+        sort: str = "name|asc",
+        include: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        params = {"per_page": per_page, "sort": sort}
+        if include:
+            params["include"] = include
         return await self.get("clients", params=params)
 
-    async def list_vendors(self, per_page: int = 100) -> Dict[str, Any]:
-        params = {"per_page": per_page}
+    async def list_vendors(
+        self,
+        per_page: int = 100,
+        sort: str = "name|asc",
+        include: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        params = {"per_page": per_page, "sort": sort}
+        if include:
+            params["include"] = include
         return await self.get("vendors", params=params)
 
-    async def list_expense_categories(self, per_page: int = 100) -> Dict[str, Any]:
-        params = {"per_page": per_page}
+    async def list_expense_categories(
+        self,
+        per_page: int = 100,
+        sort: str = "name|asc",
+        include: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        params = {"per_page": per_page, "sort": sort}
+        if include:
+            params["include"] = include
         return await self.get("expense_categories", params=params)
 
     async def get_reports(

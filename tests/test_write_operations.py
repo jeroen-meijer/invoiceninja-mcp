@@ -3,8 +3,7 @@ from datetime import datetime, timedelta
 from invoiceninja_mcp.models import Invoice, Expense
 
 
-@pytest.fixture
-async def test_client_id(client):
+async def get_test_client_id(client):
     clients_result = await client.list_clients(per_page=1)
     clients_data = clients_result.get("data", [])
     if not clients_data:
@@ -13,7 +12,8 @@ async def test_client_id(client):
 
 
 @pytest.mark.asyncio
-async def test_create_draft_invoice(client, test_client_id):
+async def test_create_draft_invoice(client):
+    test_client_id = await get_test_client_id(client)
     today = datetime.now().strftime("%Y-%m-%d")
     due_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
 
