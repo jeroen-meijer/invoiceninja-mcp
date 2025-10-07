@@ -61,7 +61,7 @@ class InvoiceNinjaClient:
 
     async def list_invoices(
         self,
-        status: Optional[str] = None,
+        status: Optional[str] = "Active",
         client_id: Optional[str] = None,
         per_page: int = 20,
         sort: str = "date|desc",
