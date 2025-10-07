@@ -1,5 +1,4 @@
 from fastmcp import FastMCP
-from typing import Optional
 import json
 import subprocess
 import tempfile
@@ -127,7 +126,7 @@ async def list_expense_categories(per_page: int = 100) -> str:
 
 @mcp.tool()
 async def list_invoices(
-    status: Optional[str] = None, client_id: Optional[str] = None, per_page: int = 20
+    status: str | None = "Active", client_id: str | None = None, per_page: int = 20
 ) -> str:
     try:
         result = await client.list_invoices(
@@ -141,7 +140,7 @@ async def list_invoices(
         output = [f"Found {len(invoices_data)} invoice(s):\n"]
         for inv_data in invoices_data:
             inv = Invoice(**inv_data)
-            output.append(f"\n📄 Invoice #{inv.get_invoice_number()}")
+            output.append(f"\n📄 Invoice #{inv.get_invoice_number()} (ID: {inv.id})")
             output.append(f"   Status: {inv.get_status_name()}")
             output.append(f"   Total (incl. tax): ${inv.get_amount_incl_tax():.2f}")
             output.append(f"   Total (excl. tax): ${inv.get_amount_excl_tax():.2f}")
@@ -366,9 +365,9 @@ async def get_invoice_preview_url(invoice_id: str) -> str:
 @mcp.tool()
 async def list_expenses(
     per_page: int = 20,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    vendor_id: Optional[str] = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    vendor_id: str | None = None,
 ) -> str:
     try:
         result = await client.list_expenses(
@@ -581,12 +580,12 @@ async def get_invoice_report(start_date: str, end_date: str) -> str:
 async def create_expense(
     amount: float,
     expense_date: str,
-    vendor_id: Optional[str] = None,
-    category_id: Optional[str] = None,
-    public_notes: Optional[str] = None,
-    private_notes: Optional[str] = None,
-    tax_rate1: Optional[float] = None,
-    tax_name1: Optional[str] = None,
+    vendor_id: str | None = None,
+    category_id: str | None = None,
+    public_notes: str | None = None,
+    private_notes: str | None = None,
+    tax_rate1: float | None = None,
+    tax_name1: str | None = None,
 ) -> str:
     try:
         expense_data = {"amount": amount, "expense_date": expense_date}
@@ -637,12 +636,12 @@ async def update_expense(expense_id: str, expense_data: str) -> str:
 @mcp.tool()
 async def create_vendor(
     name: str,
-    phone: Optional[str] = None,
-    website: Optional[str] = None,
-    address1: Optional[str] = None,
-    city: Optional[str] = None,
-    postal_code: Optional[str] = None,
-    vat_number: Optional[str] = None,
+    phone: str | None = None,
+    website: str | None = None,
+    address1: str | None = None,
+    city: str | None = None,
+    postal_code: str | None = None,
+    vat_number: str | None = None,
 ) -> str:
     try:
         vendor_data = {"name": name}

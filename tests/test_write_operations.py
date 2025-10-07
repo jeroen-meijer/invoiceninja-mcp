@@ -67,6 +67,29 @@ async def test_create_expense(client):
 
 
 @pytest.mark.asyncio
+async def test_create_expense_with_tax(client):
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    expense_data = {
+        "amount": 2700.00,
+        "expense_date": today,
+        "public_notes": "TEST EXPENSE WITH TAX - Safe to delete",
+        "private_notes": "Created by pytest",
+        "tax_rate1": 21.0,
+        "tax_name1": "BTW (Reverse Charged)",
+        "should_be_invoiced": False,
+    }
+
+    result = await client.create_expense(expense_data)
+    expense = Expense(**result.get("data", result))
+
+    assert expense.id is not None
+    assert expense.amount == 2700.00
+    assert expense.tax_rate1 == 21.0
+    assert expense.tax_name1 == "BTW (Reverse Charged)"
+
+
+@pytest.mark.asyncio
 async def test_update_expense(client):
     today = datetime.now().strftime("%Y-%m-%d")
 
