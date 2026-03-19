@@ -11,12 +11,12 @@ Model Context Protocol (MCP) server for InvoiceNinja v5.11.62 integration with C
 - 📊 Generate tax reports (quarterly and custom date ranges)
 - 📈 Invoice and expense reports
 
-**🔒 WRITE Operations (To Be Implemented)**
-- Create invoices and expenses
-- Update invoices and expenses
-- Clone invoices and expenses
+**✏️ WRITE Operations**
+- Create clients, invoices, expenses, vendors
+- Update clients, invoices, expenses
+- Delete clients and invoices (soft delete)
+- Clone invoices
 - Send invoice emails
-- Upload expense documents
 
 ## Installation
 
@@ -51,7 +51,17 @@ API_KEY=your_api_token_here
 
 4. **Test the connection:**
 ```bash
-poetry run python test_connection.py
+poetry run python tests/test_connection.py
+```
+
+5. **Run tests** (requires configured `.env` with API credentials):
+```bash
+# Run safe read-only tests (default - no data is created or modified)
+poetry run pytest tests/ -v
+
+# Run ALL tests including those that create invoices, expenses, vendors
+# WARNING: This creates real data in your Invoice Ninja instance!
+ALLOW_WRITE_TESTS=1 poetry run pytest tests/ -v
 ```
 
 ## MCP Server Configuration
@@ -85,11 +95,17 @@ The MCP server should be automatically detected when running in the project dire
 ### 📊 Utility Tools
 
 - **`test_connection()`** - Test API connection and authentication
-- **`list_clients(per_page=100)`** - List all clients
 - **`list_vendors(per_page=100)`** - List all vendors
 - **`list_expense_categories(per_page=100)`** - List expense categories
 
-### 📄 Invoice Tools (Read-Only)
+### 👥 Client Tools
+
+- **`list_clients(per_page=100)`** - List all clients
+- **`create_client(name, email?, phone?, ...)`** - Create a new client
+- **`update_client(client_id, client_data)`** - Update a client (JSON)
+- **`delete_client(client_id)`** - Delete a client (soft delete)
+
+### 📄 Invoice Tools
 
 - **`list_invoices(status?, client_id?, per_page=20)`** - List invoices with filters
   - Status: draft, sent, viewed, approved, partial, paid
@@ -98,8 +114,15 @@ The MCP server should be automatically detected when running in the project dire
   - Line items breakdown
   - Payment status
 - **`get_invoice_status(invoice_id)`** - Get current invoice status
+- **`create_invoice(client_id, line_items, ...)`** - Create a new invoice (line_items as JSON)
+- **`update_invoice(invoice_id, invoice_data)`** - Update an invoice (JSON)
+- **`clone_invoice(invoice_id)`** - Clone an existing invoice
+- **`delete_invoice(invoice_id)`** - Delete an invoice (soft delete)
+- **`email_invoice(invoice_id)`** - Email invoice to client
+- **`mark_invoice_sent(invoice_id)`** - Mark invoice as sent
+- **`mark_invoice_paid(invoice_id)`** - Mark invoice as paid
 
-### 💳 Expense Tools (Read-Only)
+### 💳 Expense Tools
 
 - **`list_expenses(per_page=20)`** - List expenses
 - **`get_expense(expense_id)`** - Get detailed expense information
@@ -150,14 +173,16 @@ async def example():
 ## Project Structure
 
 ```
-in-mcp/
-└── invoiceninja_mcp/
+invoiceninja-mcp/
+├── api-docs.yaml           # Invoice Ninja OpenAPI spec (reference)
+├── invoiceninja_mcp/
 │  ├── __init__.py
 │  ├── __main__.py        # Entry point
 │  ├── server.py          # FastMCP server with tools
 │  ├── client.py          # InvoiceNinja API client
 │  ├── config.py          # Settings management
 │  └── models.py          # Pydantic models
+├── tests/                     # Test suite
 ├── pyproject.toml             # Dependencies
 ├── .env                       # Your config (gitignored)
 ├── .env.example               # Example config
@@ -169,12 +194,23 @@ in-mcp/
 
 ### Running Tests
 
+Tests require a configured `.env` file with valid API credentials.
+
+**By default, only read-only tests run**—no invoices, expenses, or vendors are created:
+
 ```bash
 # Test API connection
-poetry run python test_connection.py
+poetry run python tests/test_connection.py
 
-# Test all MCP tools
-poetry run python test_mcp_tools.py
+# Run safe tests (list, get, reports - no writes)
+poetry run pytest tests/ -v
+```
+
+**Write tests are skipped by default** to avoid creating real data. To run them (e.g. on a demo instance):
+
+```bash
+# WARNING: Creates real invoices, expenses, vendors in your instance!
+ALLOW_WRITE_TESTS=1 poetry run pytest tests/ -v
 ```
 
 ### Running the MCP Server
@@ -186,6 +222,17 @@ poetry run python -m invoiceninja_mcp
 # Or with poetry
 poetry run invoiceninja_mcp
 ```
+
+## API Reference
+
+A copy of the Invoice Ninja OpenAPI specification is included in this repo:
+
+- **`api-docs.yaml`** - Full OpenAPI 3.0 spec from [Invoice Ninja v5-stable](https://github.com/invoiceninja/invoiceninja/blob/v5-stable/openapi/api-docs.yaml)
+
+Useful links:
+- [Invoice Ninja API Reference](https://invoiceninja.github.io/docs/api-reference/invoice-ninja-api-reference)
+- [Clients API](https://invoiceninja.github.io/docs/api-reference/clients)
+- [Invoices API](https://invoiceninja.github.io/docs/api-reference/invoices)
 
 ## API Details
 

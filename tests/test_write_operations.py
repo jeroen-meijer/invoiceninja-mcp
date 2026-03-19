@@ -12,6 +12,7 @@ async def get_test_client_id(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_create_draft_invoice(client):
     test_client_id = await get_test_client_id(client)
     today = datetime.now().strftime("%Y-%m-%d")
@@ -47,6 +48,7 @@ async def test_create_draft_invoice(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_create_expense(client):
     today = datetime.now().strftime("%Y-%m-%d")
 
@@ -67,6 +69,7 @@ async def test_create_expense(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_create_expense_with_tax(client):
     today = datetime.now().strftime("%Y-%m-%d")
 
@@ -90,6 +93,7 @@ async def test_create_expense_with_tax(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_update_expense(client):
     today = datetime.now().strftime("%Y-%m-%d")
 
@@ -136,6 +140,7 @@ async def test_list_expenses_with_date_range(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_create_vendor(client):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     vendor_data = {
@@ -154,6 +159,7 @@ async def test_create_vendor(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_clone_invoice(client):
     test_client_id = await get_test_client_id(client)
     today = datetime.now().strftime("%Y-%m-%d")
@@ -192,6 +198,7 @@ async def test_clone_invoice(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_update_invoice(client):
     test_client_id = await get_test_client_id(client)
     today = datetime.now().strftime("%Y-%m-%d")
@@ -250,6 +257,7 @@ async def test_get_latest_invoice_for_client(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_invoice_with_task_line_items(client):
     test_client_id = await get_test_client_id(client)
     today = datetime.now().strftime("%Y-%m-%d")
@@ -300,6 +308,7 @@ async def test_invoice_with_task_line_items(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_invoice_workflow_clone_update_review(client):
     test_client_id = await get_test_client_id(client)
     today = datetime.now().strftime("%Y-%m-%d")

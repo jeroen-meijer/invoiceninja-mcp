@@ -3,6 +3,7 @@ import json
 import subprocess
 import tempfile
 import os
+from datetime import date
 from pathlib import Path
 
 from .client import InvoiceNinjaClient
@@ -295,7 +296,9 @@ async def mark_invoice_sent(invoice_id: str) -> str:
     try:
         result = await client.bulk_invoices("mark_sent", [invoice_id])
 
-        return f"✅ Invoice {invoice_id} marked as sent!\n{json.dumps(result, indent=2)}"
+        return (
+            f"✅ Invoice {invoice_id} marked as sent!\n{json.dumps(result, indent=2)}"
+        )
     except Exception as e:
         return f"❌ Error marking invoice as sent: {str(e)}"
 
@@ -305,9 +308,78 @@ async def mark_invoice_paid(invoice_id: str) -> str:
     try:
         result = await client.bulk_invoices("mark_paid", [invoice_id])
 
-        return f"✅ Invoice {invoice_id} marked as paid!\n{json.dumps(result, indent=2)}"
+        return (
+            f"✅ Invoice {invoice_id} marked as paid!\n{json.dumps(result, indent=2)}"
+        )
     except Exception as e:
         return f"❌ Error marking invoice as paid: {str(e)}"
+
+
+@mcp.tool()
+async def record_invoice_payment_and_send_receipt(
+    invoice_id: str,
+    payment_date: str | None = None,
+    transaction_reference: str | None = None,
+) -> str:
+    """
+    Records a full bank transfer payment for an invoice and sends a payment receipt.
+
+    This single operation:
+    1. Marks the invoice as paid
+    2. Creates a payment record (type: bank transfer, full amount)
+    3. Emails the payment receipt to the client contact(s)
+
+    Args:
+        invoice_id: The invoice ID (hashed) to record payment for
+        payment_date: Payment date (YYYY-MM-DD). Defaults to today if omitted.
+        transaction_reference: Optional reference (e.g. bank transfer ID)
+
+    Returns:
+        Success message with payment details, or error message
+    """
+    try:
+        inv_result = await client.get_invoice(invoice_id)
+        inv_data = inv_result.get("data", inv_result)
+        inv = Invoice(**inv_data)
+
+        if inv.balance <= 0:
+            return f"❌ Invoice #{inv.get_invoice_number()} has no balance due (already paid or zero amount)."
+
+        if not inv.client_id:
+            return f"❌ Invoice #{inv.get_invoice_number()} has no client associated."
+
+        payment_date_str = payment_date or date.today().isoformat()
+        amount = inv.balance
+
+        result = await client.create_payment(
+            client_id=inv.client_id,
+            amount=amount,
+            invoices=[{"invoice_id": invoice_id, "amount": str(amount)}],
+            payment_date=payment_date_str,
+            type_id="1",
+            transaction_reference=transaction_reference,
+            email_receipt=True,
+        )
+
+        payment_data = result.get("data", result)
+        payment_id = payment_data.get("id", "N/A")
+        payment_number = payment_data.get("number", "N/A")
+
+        output = [
+            f"✅ Payment recorded and receipt sent!\n",
+            f"Invoice #{inv.get_invoice_number()} (ID: {inv.id})",
+            f"Payment ID: {payment_id}",
+            f"Payment #: {payment_number}",
+            f"Amount: ${amount:.2f} (bank transfer)",
+            f"Date: {payment_date_str}",
+        ]
+        if transaction_reference:
+            output.append(f"Reference: {transaction_reference}")
+        output.append("\nPayment receipt email sent to client contact(s).")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error recording payment and sending receipt: {str(e)}"
 
 
 @mcp.tool()
@@ -587,6 +659,9 @@ async def create_expense(
     tax_rate1: float | None = None,
     tax_name1: str | None = None,
 ) -> str:
+    """
+    Creates a new expense. expense_date MUST be full YYYY-MM-DD (e.g. 2026-02-16).
+    """
     try:
         expense_data = {"amount": amount, "expense_date": expense_date}
 
@@ -631,6 +706,298 @@ async def update_expense(expense_id: str, expense_data: str) -> str:
         return "\n".join(output)
     except Exception as e:
         return f"❌ Error updating expense: {str(e)}"
+
+
+@mcp.tool()
+async def create_client(
+    name: str,
+    email: str | None = None,
+    phone: str | None = None,
+    contact_first_name: str | None = None,
+    contact_last_name: str | None = None,
+    website: str | None = None,
+    address1: str | None = None,
+    address2: str | None = None,
+    city: str | None = None,
+    state: str | None = None,
+    postal_code: str | None = None,
+    country_id: str | None = None,
+    vat_number: str | None = None,
+    id_number: str | None = None,
+    public_notes: str | None = None,
+    private_notes: str | None = None,
+) -> str:
+    """
+    Creates a new client in Invoice Ninja.
+
+    Args:
+        name: Client name (required)
+        email: Client email address
+        phone: Client phone number
+        contact_first_name: Primary contact first name
+        contact_last_name: Primary contact last name
+        website: Client website URL
+        address1: Address line 1
+        address2: Address line 2
+        city: City
+        state: State/Province
+        postal_code: Postal/ZIP code
+        country_id: Country ID (numeric string)
+        vat_number: VAT/Tax number
+        id_number: Client ID number
+        public_notes: Notes visible to client
+        private_notes: Internal notes
+
+    Returns:
+        Success message with client details
+    """
+    try:
+        client_data: dict = {"name": name}
+
+        # Add optional fields if provided
+        if email or phone or contact_first_name or contact_last_name:
+            contact: dict = {}
+            if contact_first_name:
+                contact["first_name"] = contact_first_name
+            if contact_last_name:
+                contact["last_name"] = contact_last_name
+            if email:
+                contact["email"] = email
+            if phone:
+                contact["phone"] = phone
+            if contact:
+                contact["is_primary"] = True
+                client_data["contacts"] = [contact]
+        if website:
+            client_data["website"] = website
+        if address1:
+            client_data["address1"] = address1
+        if address2:
+            client_data["address2"] = address2
+        if city:
+            client_data["city"] = city
+        if state:
+            client_data["state"] = state
+        if postal_code:
+            client_data["postal_code"] = postal_code
+        if country_id:
+            client_data["country_id"] = country_id
+        if vat_number:
+            client_data["vat_number"] = vat_number
+        if id_number:
+            client_data["id_number"] = id_number
+        if public_notes:
+            client_data["public_notes"] = public_notes
+        if private_notes:
+            client_data["private_notes"] = private_notes
+
+        result = await client.create_client(client_data)
+        client_result = result.get("data", result)
+        c = Client(**client_result)
+
+        # Extract email from contacts if not at top level
+        contact_email = c.email
+        contacts = c.contacts or []
+        if not contact_email and contacts:
+            first_contact = contacts[0]
+            if isinstance(first_contact, dict):
+                contact_email = first_contact.get("email")
+
+        output = [f"✅ Client created successfully!\n"]
+        output.append(f"ID: {c.id}")
+        output.append(f"Name: {c.name}")
+        if contact_email:
+            output.append(f"Email: {contact_email}")
+        if c.phone:
+            output.append(f"Phone: {c.phone}")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error creating client: {str(e)}"
+
+
+@mcp.tool()
+async def create_invoice(
+    client_id: str,
+    line_items: str,
+    invoice_date: str | None = None,
+    due_date: str | None = None,
+    po_number: str | None = None,
+    discount: float | None = None,
+    partial: float | None = None,
+    public_notes: str | None = None,
+    private_notes: str | None = None,
+    terms: str | None = None,
+    footer: str | None = None,
+    status_id: int | None = 1,
+) -> str:
+    """
+    Creates a new invoice in Invoice Ninja.
+
+    Args:
+        client_id: The client ID (required)
+        line_items: JSON string of line items array. Each item should have:
+                   - product_key: Product/service name
+                   - notes: Description
+                   - cost: Unit price
+                   - quantity: Quantity
+                   - tax_name1: Tax name (optional)
+                   - tax_rate1: Tax rate (optional)
+        invoice_date: Invoice date. MUST be full YYYY-MM-DD (e.g. 2026-02-16).
+        due_date: Due date. MUST be full YYYY-MM-DD (e.g. 2026-03-18).
+        po_number: Purchase order number
+        discount: Discount amount
+        partial: Partial payment amount
+        public_notes: Notes visible to client
+        private_notes: Internal notes
+        terms: Payment terms
+        footer: Invoice footer text
+        status_id: Invoice status (1=Draft, 2=Sent, etc.). Default 1 for draft.
+
+    Returns:
+        Success message with invoice details
+
+    Example line_items JSON:
+    [
+        {
+            "product_key": "Consulting",
+            "notes": "Software consulting services",
+            "cost": 150.00,
+            "quantity": 8,
+            "tax_name1": "VAT",
+            "tax_rate1": 21
+        }
+    ]
+    """
+    try:
+        # Parse line items JSON
+        try:
+            items = json.loads(line_items)
+        except json.JSONDecodeError:
+            return "❌ Error: line_items must be valid JSON array"
+
+        invoice_data: dict = {
+            "client_id": client_id,
+            "line_items": items,
+            "status_id": status_id,
+        }
+
+        # Add optional fields
+        if invoice_date:
+            invoice_data["date"] = invoice_date
+        if due_date:
+            invoice_data["due_date"] = due_date
+        if po_number:
+            invoice_data["po_number"] = po_number
+        if discount is not None:
+            invoice_data["discount"] = discount
+        if partial is not None:
+            invoice_data["partial"] = partial
+        if public_notes:
+            invoice_data["public_notes"] = public_notes
+        if private_notes:
+            invoice_data["private_notes"] = private_notes
+        if terms:
+            invoice_data["terms"] = terms
+        if footer:
+            invoice_data["footer"] = footer
+
+        result = await client.create_invoice(invoice_data)
+        inv_data = result.get("data", result)
+        inv = Invoice(**inv_data)
+
+        output = [f"✅ Invoice created successfully!\n"]
+        output.append(f"Invoice #{inv.get_invoice_number()} (ID: {inv.id})")
+        output.append(f"Status: {inv.get_status_name()}")
+        output.append(f"Total (incl. tax): ${inv.get_amount_incl_tax():.2f}")
+        output.append(f"Total (excl. tax): ${inv.get_amount_excl_tax():.2f}")
+        if inv.date:
+            output.append(f"Date: {inv.date}")
+        if inv.due_date:
+            output.append(f"Due Date: {inv.due_date}")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error creating invoice: {str(e)}"
+
+
+@mcp.tool()
+async def update_client(client_id: str, client_data: str) -> str:
+    """
+    Updates an existing client.
+
+    Args:
+        client_id: The client ID to update
+        client_data: JSON string with fields to update
+
+    Returns:
+        Success message with updated client details
+    """
+    try:
+        data = json.loads(client_data)
+        result = await client.update_client(client_id, data)
+        client_result = result.get("data", result)
+        c = Client(**client_result)
+
+        contacts = c.contacts or []
+        contact_email = c.email
+        if not contact_email and contacts:
+            first_contact = contacts[0]
+            if isinstance(first_contact, dict):
+                contact_email = first_contact.get("email")
+        contact_phone = c.phone
+        if not contact_phone and contacts:
+            first_contact = contacts[0]
+            if isinstance(first_contact, dict):
+                contact_phone = first_contact.get("phone")
+
+        output = [f"✅ Client updated successfully!\n"]
+        output.append(f"ID: {c.id}")
+        output.append(f"Name: {c.name}")
+        if contact_email:
+            output.append(f"Email: {contact_email}")
+        if contact_phone:
+            output.append(f"Phone: {contact_phone}")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error updating client: {str(e)}"
+
+
+@mcp.tool()
+async def delete_client(client_id: str) -> str:
+    """
+    Deletes a client (soft delete).
+
+    Args:
+        client_id: The client ID to delete
+
+    Returns:
+        Success or error message
+    """
+    try:
+        await client.delete_client(client_id)
+        return f"✅ Client {client_id} deleted successfully!"
+    except Exception as e:
+        return f"❌ Error deleting client: {str(e)}"
+
+
+@mcp.tool()
+async def delete_invoice(invoice_id: str) -> str:
+    """
+    Deletes an invoice (soft delete).
+
+    Args:
+        invoice_id: The invoice ID to delete
+
+    Returns:
+        Success or error message
+    """
+    try:
+        await client.delete_invoice(invoice_id)
+        return f"✅ Invoice {invoice_id} deleted successfully!"
+    except Exception as e:
+        return f"❌ Error deleting invoice: {str(e)}"
 
 
 @mcp.tool()

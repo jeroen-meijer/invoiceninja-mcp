@@ -44,9 +44,12 @@ class InvoiceNinjaClient:
         return await self._make_request("GET", endpoint, params=params)
 
     async def post(
-        self, endpoint: str, json: Optional[Dict[str, Any]] = None
+        self,
+        endpoint: str,
+        json: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        return await self._make_request("POST", endpoint, json=json)
+        return await self._make_request("POST", endpoint, json=json, params=params)
 
     async def put(
         self, endpoint: str, json: Optional[Dict[str, Any]] = None
@@ -162,6 +165,20 @@ class InvoiceNinjaClient:
     async def create_vendor(self, vendor_data: Dict[str, Any]) -> Dict[str, Any]:
         return await self.post("vendors", json=vendor_data)
 
+    async def create_client(self, client_data: Dict[str, Any]) -> Dict[str, Any]:
+        return await self.post("clients", json=client_data)
+
+    async def update_client(
+        self, client_id: str, client_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await self.put(f"clients/{client_id}", json=client_data)
+
+    async def delete_client(self, client_id: str) -> Dict[str, Any]:
+        return await self.delete(f"clients/{client_id}")
+
+    async def delete_invoice(self, invoice_id: str) -> Dict[str, Any]:
+        return await self.delete(f"invoices/{invoice_id}")
+
     async def update_invoice(
         self, invoice_id: str, invoice_data: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -187,3 +204,33 @@ class InvoiceNinjaClient:
             response = await client.get(url, headers=self.headers)
             response.raise_for_status()
             return response.content
+
+    async def create_payment(
+        self,
+        client_id: str,
+        amount: float,
+        invoices: List[Dict[str, Any]],
+        payment_date: str,
+        type_id: str = "1",
+        transaction_reference: Optional[str] = None,
+        email_receipt: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Create a payment. type_id '1' = Bank Transfer.
+        When invoices are linked, the payment is applied and invoices are marked paid.
+        """
+        request_params = {}
+        if email_receipt:
+            request_params["email_receipt"] = "true"
+
+        payload: Dict[str, Any] = {
+            "client_id": client_id,
+            "amount": amount,
+            "date": payment_date,
+            "type_id": type_id,
+            "invoices": invoices,
+        }
+        if transaction_reference:
+            payload["transaction_reference"] = transaction_reference
+
+        return await self.post("payments", json=payload, params=request_params or None)

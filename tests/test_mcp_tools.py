@@ -62,6 +62,7 @@ async def test_list_expense_categories(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_mcp_create_expense(client):
     today = datetime.now().strftime("%Y-%m-%d")
     expense_data = {
@@ -75,6 +76,7 @@ async def test_mcp_create_expense(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_mcp_create_vendor(client):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     vendor_data = {"name": f"TEST-MCP-VENDOR-{timestamp}", "phone": "555-9999"}
@@ -84,6 +86,7 @@ async def test_mcp_create_vendor(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_search_vendors(client):
     await client.create_vendor({"name": "Versio Hosting BV"})
     await client.create_vendor({"name": "Google Cloud"})
@@ -149,6 +152,7 @@ async def test_get_invoice_with_invitations(client):
 
 
 @pytest.mark.asyncio
+@pytest.mark.writes_data
 async def test_mark_invoice_paid(client):
     result = await client.list_invoices(per_page=1, status="sent")
     invoices_data = result.get("data", [])

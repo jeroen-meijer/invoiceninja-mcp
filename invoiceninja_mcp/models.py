@@ -165,7 +165,9 @@ class Client(BaseModel):
     user_id: Optional[str] = None
     assigned_user_id: Optional[str] = None
     name: Optional[str] = None
+    email: Optional[str] = None  # Primary contact email (from contacts)
     website: Optional[str] = None
+    contacts: Optional[List[dict]] = None  # Client contacts with email/phone
     private_notes: Optional[str] = None
     public_notes: Optional[str] = None
     phone: Optional[str] = None
