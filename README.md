@@ -1,6 +1,6 @@
 # InvoiceNinja MCP Server
 
-Model Context Protocol (MCP) server for InvoiceNinja v5.11.62 integration with Claude Desktop, Claude Code, and Cursor.ai.
+Model Context Protocol (MCP) server for InvoiceNinja v5 integration with Claude Desktop, Claude Code, and Cursor.ai.
 
 ## Features
 
@@ -23,38 +23,28 @@ Model Context Protocol (MCP) server for InvoiceNinja v5.11.62 integration with C
 ### Prerequisites
 - Python 3.10+
 - Poetry (recommended) or pip
-- InvoiceNinja v5.11.62 instance
+- InvoiceNinja v5 instance
 - API token from your InvoiceNinja admin panel
 
 ### Setup
 
-1. **Clone or navigate to the project:**
-```bash
-cd in-mcp
-```
-
-2. **Install dependencies:**
+1. **Install dependencies:**
 ```bash
 poetry install
 ```
 
-3. **Configure environment variables:**
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your InvoiceNinja credentials:
+2. **Configure credentials** (e.g. in a `.env` file):
 ```env
 API_URL=https://your-instance.com/api/v1
 API_KEY=your_api_token_here
 ```
 
-4. **Test the connection:**
+3. **Verify connection** (optional):
 ```bash
 poetry run python tests/test_connection.py
 ```
 
-5. **Run tests** (requires configured `.env` with API credentials):
+4. **Run tests** (optional, requires configured credentials):
 ```bash
 # Run safe read-only tests (default - no data is created or modified)
 poetry run pytest tests/ -v
@@ -68,7 +58,7 @@ ALLOW_WRITE_TESTS=1 poetry run pytest tests/ -v
 
 ### Claude Desktop
 
-Add to your `claude_desktop_config.json`:
+Add to your MCP config:
 
 ```json
 {
@@ -76,7 +66,7 @@ Add to your `claude_desktop_config.json`:
     "invoiceninja": {
       "command": "poetry",
       "args": ["run", "python", "-m", "invoiceninja_mcp"],
-      "cwd": "/full/path/to/in-mcp"
+      "cwd": "/path/to/invoiceninja-mcp"
     }
   }
 }
@@ -96,6 +86,7 @@ The MCP server should be automatically detected when running in the project dire
 
 - **`test_connection()`** - Test API connection and authentication
 - **`list_vendors(per_page=100)`** - List all vendors
+- **`search_vendors(search_term)`** - Search vendors by name
 - **`list_expense_categories(per_page=100)`** - List expense categories
 
 ### 👥 Client Tools
@@ -114,6 +105,7 @@ The MCP server should be automatically detected when running in the project dire
   - Line items breakdown
   - Payment status
 - **`get_invoice_status(invoice_id)`** - Get current invoice status
+- **`get_latest_invoice_for_client(client_id)`** - Get the most recent invoice for a client
 - **`create_invoice(client_id, line_items, ...)`** - Create a new invoice (line_items as JSON)
 - **`update_invoice(invoice_id, invoice_data)`** - Update an invoice (JSON)
 - **`clone_invoice(invoice_id)`** - Clone an existing invoice
@@ -121,6 +113,9 @@ The MCP server should be automatically detected when running in the project dire
 - **`email_invoice(invoice_id)`** - Email invoice to client
 - **`mark_invoice_sent(invoice_id)`** - Mark invoice as sent
 - **`mark_invoice_paid(invoice_id)`** - Mark invoice as paid
+- **`record_invoice_payment_and_send_receipt(invoice_id, payment_date?, transaction_reference?)`** - Record full bank transfer payment and email receipt to client
+- **`preview_invoice_pdf(invoice_id)`** - Get base64-encoded PDF preview
+- **`get_invoice_preview_url(invoice_id)`** - Get URL to preview invoice in browser
 
 ### 💳 Expense Tools
 
@@ -159,106 +154,20 @@ from invoiceninja_mcp.client import InvoiceNinjaClient
 
 async def example():
     client = InvoiceNinjaClient()
-
-    # List invoices
     invoices = await client.list_invoices(status="sent", per_page=10)
-
-    # Get specific invoice
     invoice = await client.get_invoice("invoice_id_here")
-
-    # List clients
     clients = await client.list_clients()
 ```
 
-## Project Structure
-
-```
-invoiceninja-mcp/
-├── api-docs.yaml           # Invoice Ninja OpenAPI spec (reference)
-├── invoiceninja_mcp/
-│  ├── __init__.py
-│  ├── __main__.py        # Entry point
-│  ├── server.py          # FastMCP server with tools
-│  ├── client.py          # InvoiceNinja API client
-│  ├── config.py          # Settings management
-│  └── models.py          # Pydantic models
-├── tests/                     # Test suite
-├── pyproject.toml             # Dependencies
-├── .env                       # Your config (gitignored)
-├── .env.example               # Example config
-├── .gitignore
-└── README.md
-```
-
-## Development
-
-### Running Tests
-
-Tests require a configured `.env` file with valid API credentials.
-
-**By default, only read-only tests run**—no invoices, expenses, or vendors are created:
+## Running the MCP Server
 
 ```bash
-# Test API connection
-poetry run python tests/test_connection.py
-
-# Run safe tests (list, get, reports - no writes)
-poetry run pytest tests/ -v
-```
-
-**Write tests are skipped by default** to avoid creating real data. To run them (e.g. on a demo instance):
-
-```bash
-# WARNING: Creates real invoices, expenses, vendors in your instance!
-ALLOW_WRITE_TESTS=1 poetry run pytest tests/ -v
-```
-
-### Running the MCP Server
-
-```bash
-# Start the server
 poetry run python -m invoiceninja_mcp
-
-# Or with poetry
-poetry run invoiceninja_mcp
 ```
 
 ## API Reference
 
-A copy of the Invoice Ninja OpenAPI specification is included in this repo:
-
-- **`api-docs.yaml`** - Full OpenAPI 3.0 spec from [Invoice Ninja v5-stable](https://github.com/invoiceninja/invoiceninja/blob/v5-stable/openapi/api-docs.yaml)
-
-Useful links:
-- [Invoice Ninja API Reference](https://invoiceninja.github.io/docs/api-reference/invoice-ninja-api-reference)
-- [Clients API](https://invoiceninja.github.io/docs/api-reference/clients)
-- [Invoices API](https://invoiceninja.github.io/docs/api-reference/invoices)
-
-## API Details
-
-### Authentication Headers
-
-The client automatically includes:
-- `X-API-Token`: Your API token
-- `X-Requested-With`: XMLHttpRequest
-- `Content-Type`: application/json
-- `Accept`: application/json
-
-### Invoice Status Codes
-
-- 1 = Draft
-- 2 = Sent
-- 3 = Viewed
-- 4 = Approved
-- 5 = Partial
-- 6 = Paid
-
-### Tax Calculations
-
-Invoices return both:
-- **Amount including tax** - Full invoice total
-- **Amount excluding tax** - Subtotal before tax
-- **Tax amount** - Total tax
+[Invoice Ninja API docs](https://invoiceninja.github.io/docs/api-reference/invoice-ninja-api-reference) for detailed endpoint reference.
 
 ## Troubleshooting
 
@@ -266,17 +175,17 @@ Invoices return both:
 
 - Verify your API token in InvoiceNinja admin panel
 - Check that the token has appropriate permissions
-- Ensure API_URL includes `/api/v1`
+- Ensure `API_URL` includes `/api/v1`
 
 ### Connection Timeout
 
-- Increase `INVOICENINJA_TIMEOUT` in `.env`
+- Increase `INVOICENINJA_TIMEOUT`
 - Check your InvoiceNinja instance is accessible
 
 ### Validation Errors
 
-- Ensure you're using InvoiceNinja v5.11.62 or compatible version
-- Check API responses match expected data structure
+- Ensure your InvoiceNinja version is compatible with the API
+- Verify request data format matches API expectations
 
 ## License
 
@@ -292,15 +201,11 @@ Built with:
 
 ## Contributing
 
-Contributions welcome! Please ensure:
-- All tests pass
-- Code follows existing patterns
-- Documentation is updated
-- Security best practices are followed
+Contributions welcome. Ensure tests pass and security best practices are followed.
 
 ## Security
 
-- Never commit `.env` file
+- Do not commit credentials
 - Keep API tokens secure
 - Use HTTPS for InvoiceNinja instance
 - Review API token permissions regularly
