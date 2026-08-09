@@ -17,6 +17,8 @@ Model Context Protocol (MCP) server for InvoiceNinja v5 integration with Claude 
 - Delete clients and invoices (soft delete)
 - Clone invoices
 - Send invoice emails
+- Email payment receipts (without re-sending the invoice)
+- View email delivery history (client / entity / invoice)
 
 ## Installation
 
@@ -91,7 +93,8 @@ The MCP server should be automatically detected when running in the project dire
 
 ### 👥 Client Tools
 
-- **`list_clients(per_page=100)`** - List all clients
+- **`list_clients(per_page=100)`** - List all clients (includes contact emails)
+- **`get_client(client_id)`** - Get client details including contacts and emails
 - **`create_client(name, email?, phone?, ...)`** - Create a new client
 - **`update_client(client_id, client_data)`** - Update a client (JSON)
 - **`delete_client(client_id)`** - Delete a client (soft delete)
@@ -114,6 +117,10 @@ The MCP server should be automatically detected when running in the project dire
 - **`mark_invoice_sent(invoice_id)`** - Mark invoice as sent
 - **`mark_invoice_paid(invoice_id)`** - Mark invoice as paid
 - **`record_invoice_payment_and_send_receipt(invoice_id, payment_date?, transaction_reference?)`** - Record full bank transfer payment and email receipt to client
+- **`email_payment_receipt(invoice_id?, payment_id?)`** - Email only the payment receipt (not the invoice) for an existing payment; resolve via `payment_id` or latest payment on `invoice_id`
+- **`get_client_email_history(client_id)`** - List mail delivery history for a client (invoices, receipts, etc.)
+- **`get_entity_email_history(entity, entity_id)`** - List mail history for an invoice/quote/credit/etc. (not payments — use client history)
+- **`get_invoice_email_history(invoice_id)`** - Invitation delivery status + SystemLog history for one invoice
 - **`preview_invoice_pdf(invoice_id)`** - Get base64-encoded PDF preview
 - **`get_invoice_preview_url(invoice_id)`** - Get URL to preview invoice in browser
 

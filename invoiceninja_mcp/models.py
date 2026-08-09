@@ -49,6 +49,7 @@ class Invoice(BaseModel):
     assigned_user_id: Optional[str] = None
     amount: float = 0
     balance: float = 0
+    currency_id: Optional[str] = None
     client_id: Optional[str] = None
     vendor_id: Optional[str] = None
     status_id: int = 1

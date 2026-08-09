@@ -7,10 +7,57 @@ from datetime import date
 from pathlib import Path
 
 from .client import InvoiceNinjaClient
+from .currency import CurrencyFormatter
 from .models import Invoice, Expense, Client, Vendor, ExpenseCategory
 
 mcp = FastMCP("InvoiceNinja MCP Server")
 client = InvoiceNinjaClient()
+currency_formatter = CurrencyFormatter(client)
+
+
+async def money(amount: float, currency_id: str | None = None) -> str:
+    return await currency_formatter.format_amount(amount, currency_id)
+
+
+def _contact_emails(client_data: dict | Client) -> list[str]:
+    """Collect unique contact emails from a client payload or model."""
+    if isinstance(client_data, Client):
+        top_email = client_data.email
+        contacts = client_data.contacts or []
+    else:
+        top_email = client_data.get("email")
+        contacts = client_data.get("contacts") or []
+
+    emails: list[str] = []
+    if top_email:
+        emails.append(top_email)
+    for contact in contacts:
+        if not isinstance(contact, dict):
+            continue
+        email = contact.get("email")
+        if email and email not in emails:
+            emails.append(email)
+    return emails
+
+
+def _format_contact_lines(contacts: list | None) -> list[str]:
+    lines: list[str] = []
+    for contact in contacts or []:
+        if not isinstance(contact, dict):
+            continue
+        name_parts = [
+            p for p in (contact.get("first_name"), contact.get("last_name")) if p
+        ]
+        name = " ".join(name_parts) if name_parts else "Contact"
+        email = contact.get("email") or "(no email)"
+        send = contact.get("send_email")
+        send_flag = ""
+        if send is True:
+            send_flag = " [send]"
+        elif send is False:
+            send_flag = " [no-send]"
+        lines.append(f"  • {name}: {email}{send_flag}")
+    return lines
 
 
 def get_quarter_dates(year: int, quarter: int) -> tuple[str, str]:
@@ -34,8 +81,17 @@ async def test_connection() -> str:
 
 @mcp.tool()
 async def list_clients(per_page: int = 100) -> str:
+    """
+    List clients with IDs, balances, and contact emails.
+
+    Args:
+        per_page: Max clients to return (default 100)
+
+    Returns:
+        Formatted client list including emails when available
+    """
     try:
-        result = await client.list_clients(per_page=per_page)
+        result = await client.list_clients(per_page=per_page, include="contacts")
         clients_data = result.get("data", [])
 
         if not clients_data:
@@ -45,12 +101,72 @@ async def list_clients(per_page: int = 100) -> str:
         for client_data in clients_data:
             c = Client(**client_data)
             output.append(f"• {c.name or 'Unnamed'} (ID: {c.id})")
+            emails = _contact_emails(c)
+            if emails:
+                output.append(f"  Email: {', '.join(emails)}")
             if c.balance:
-                output.append(f"  Balance: ${c.balance:.2f}")
+                output.append(f"  Balance: {await money(c.balance)}")
 
         return "\n".join(output)
     except Exception as e:
         return f"❌ Error listing clients: {str(e)}"
+
+
+@mcp.tool()
+async def get_client(client_id: str) -> str:
+    """
+    Get client details including contact names and emails.
+
+    Args:
+        client_id: Hashed client ID
+
+    Returns:
+        Formatted client profile with contacts, or an error message
+    """
+    try:
+        result = await client.get_client(client_id, include="contacts")
+        data = result.get("data", result)
+        c = Client(**data)
+
+        output = [
+            f"👤 Client: {c.name or 'Unnamed'}",
+            f"ID: {c.id}",
+        ]
+        emails = _contact_emails(c)
+        if emails:
+            output.append(f"Email(s): {', '.join(emails)}")
+        if c.phone:
+            output.append(f"Phone: {c.phone}")
+        if c.website:
+            output.append(f"Website: {c.website}")
+        if c.vat_number:
+            output.append(f"VAT: {c.vat_number}")
+        if c.balance:
+            output.append(f"Balance: {await money(c.balance)}")
+        if c.paid_to_date:
+            output.append(f"Paid to date: {await money(c.paid_to_date)}")
+
+        address_parts = [
+            p
+            for p in (c.address1, c.address2, c.postal_code, c.city, c.state)
+            if p
+        ]
+        if address_parts:
+            output.append(f"Address: {', '.join(address_parts)}")
+
+        contact_lines = _format_contact_lines(c.contacts)
+        if contact_lines:
+            output.append("\nContacts:")
+            output.extend(contact_lines)
+
+        if c.private_notes:
+            output.append(f"\nPrivate notes: {c.private_notes}")
+        if c.public_notes:
+            output.append(f"Public notes: {c.public_notes}")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error getting client: {str(e)}"
 
 
 @mcp.tool()
@@ -143,9 +259,13 @@ async def list_invoices(
             inv = Invoice(**inv_data)
             output.append(f"\n📄 Invoice #{inv.get_invoice_number()} (ID: {inv.id})")
             output.append(f"   Status: {inv.get_status_name()}")
-            output.append(f"   Total (incl. tax): ${inv.get_amount_incl_tax():.2f}")
-            output.append(f"   Total (excl. tax): ${inv.get_amount_excl_tax():.2f}")
-            output.append(f"   Balance: ${inv.balance:.2f}")
+            output.append(
+                f"   Total (incl. tax): {await money(inv.get_amount_incl_tax(), inv.currency_id)}"
+            )
+            output.append(
+                f"   Total (excl. tax): {await money(inv.get_amount_excl_tax(), inv.currency_id)}"
+            )
+            output.append(f"   Balance: {await money(inv.balance, inv.currency_id)}")
             if inv.date:
                 output.append(f"   Date: {inv.date}")
             if inv.due_date:
@@ -167,10 +287,16 @@ async def get_invoice(invoice_id: str) -> str:
         output.append(f"ID: {inv.id}")
         output.append(f"Status: {inv.get_status_name()}")
         output.append("\n💰 Amounts:")
-        output.append(f"   Total (incl. tax): ${inv.get_amount_incl_tax():.2f}")
-        output.append(f"   Total (excl. tax): ${inv.get_amount_excl_tax():.2f}")
-        output.append(f"   Tax Amount: ${inv.total_taxes or 0:.2f}")
-        output.append(f"   Balance Due: ${inv.balance:.2f}")
+        output.append(
+            f"   Total (incl. tax): {await money(inv.get_amount_incl_tax(), inv.currency_id)}"
+        )
+        output.append(
+            f"   Total (excl. tax): {await money(inv.get_amount_excl_tax(), inv.currency_id)}"
+        )
+        output.append(
+            f"   Tax Amount: {await money(inv.total_taxes or 0, inv.currency_id)}"
+        )
+        output.append(f"   Balance Due: {await money(inv.balance, inv.currency_id)}")
 
         if inv.date:
             output.append("\n📅 Dates:")
@@ -190,8 +316,9 @@ async def get_invoice(invoice_id: str) -> str:
                 if item.notes:
                     output.append(f"      {item.notes}")
                 if item.quantity and item.cost:
+                    line_total = item.line_total or 0
                     output.append(
-                        f"      Qty: {item.quantity} × ${item.cost:.2f} = ${item.line_total or 0:.2f}"
+                        f"      Qty: {item.quantity} × {await money(item.cost, inv.currency_id)} = {await money(line_total, inv.currency_id)}"
                     )
 
         return "\n".join(output)
@@ -227,8 +354,10 @@ async def get_latest_invoice_for_client(client_id: str) -> str:
         output = [f"📄 Latest Invoice for Client {client_id}\n"]
         output.append(f"Invoice #{inv.get_invoice_number()} (ID: {inv.id})")
         output.append(f"Status: {inv.get_status_name()}")
-        output.append(f"Total (incl. tax): ${inv.get_amount_incl_tax():.2f}")
-        output.append(f"Balance: ${inv.balance:.2f}")
+        output.append(
+            f"Total (incl. tax): {await money(inv.get_amount_incl_tax(), inv.currency_id)}"
+        )
+        output.append(f"Balance: {await money(inv.balance, inv.currency_id)}")
         if inv.date:
             output.append(f"Date: {inv.date}")
         if inv.due_date:
@@ -250,7 +379,9 @@ async def clone_invoice(invoice_id: str) -> str:
         output.append(f"New Invoice ID: {inv.id}")
         output.append(f"Invoice Number: {inv.get_invoice_number()}")
         output.append(f"Status: {inv.get_status_name()}")
-        output.append(f"Total: ${inv.get_amount_incl_tax():.2f}")
+        output.append(
+            f"Total: {await money(inv.get_amount_incl_tax(), inv.currency_id)}"
+        )
 
         return "\n".join(output)
     except Exception as e:
@@ -270,7 +401,9 @@ async def update_invoice(invoice_id: str, invoice_data: str) -> str:
         output = [f"✅ Invoice updated successfully!\n"]
         output.append(f"Invoice #{inv.get_invoice_number()} (ID: {inv.id})")
         output.append(f"Status: {inv.get_status_name()}")
-        output.append(f"Total (incl. tax): ${inv.get_amount_incl_tax():.2f}")
+        output.append(
+            f"Total (incl. tax): {await money(inv.get_amount_incl_tax(), inv.currency_id)}"
+        )
         if inv.date:
             output.append(f"Date: {inv.date}")
         if inv.due_date:
@@ -370,7 +503,7 @@ async def record_invoice_payment_and_send_receipt(
             f"Invoice #{inv.get_invoice_number()} (ID: {inv.id})",
             f"Payment ID: {payment_id}",
             f"Payment #: {payment_number}",
-            f"Amount: ${amount:.2f} (bank transfer)",
+            f"Amount: {await money(amount, inv.currency_id)} (bank transfer)",
             f"Date: {payment_date_str}",
         ]
         if transaction_reference:
@@ -380,6 +513,307 @@ async def record_invoice_payment_and_send_receipt(
         return "\n".join(output)
     except Exception as e:
         return f"❌ Error recording payment and sending receipt: {str(e)}"
+
+
+@mcp.tool()
+async def email_payment_receipt(
+    invoice_id: str | None = None,
+    payment_id: str | None = None,
+) -> str:
+    """
+    Email only the payment receipt to the invoiced client's contacts.
+
+    Does not email the invoice. Uses Invoice Ninja's payment receipt template
+    (POST /api/v1/emails with template email_template_payment).
+
+    Provide payment_id directly, or invoice_id to resolve the latest payment
+    applied to that invoice (useful after mark_invoice_paid).
+
+    Args:
+        invoice_id: Hashed invoice ID — finds payments on this invoice
+        payment_id: Hashed payment ID — preferred when known
+
+    Returns:
+        Success message with payment details, or an error message
+    """
+    try:
+        if not payment_id and not invoice_id:
+            return "❌ Provide payment_id or invoice_id."
+
+        resolved_payment_id = payment_id
+        payment_meta: dict = {}
+        invoice_number = None
+
+        if not resolved_payment_id:
+            payments = await client.find_payments_for_invoice(invoice_id)
+            if not payments:
+                return (
+                    f"❌ No payments found for invoice {invoice_id}. "
+                    "Record a payment first (or pass payment_id)."
+                )
+            # Prefer newest by date, then by number
+            payments_sorted = sorted(
+                payments,
+                key=lambda p: (p.get("date") or "", p.get("number") or "", p.get("id") or ""),
+                reverse=True,
+            )
+            payment_meta = payments_sorted[0]
+            resolved_payment_id = payment_meta.get("id")
+            if len(payments_sorted) > 1:
+                others = ", ".join(
+                    f"#{p.get('number', p.get('id'))}" for p in payments_sorted[1:]
+                )
+                note_multiple = (
+                    f"\nNote: {len(payments_sorted)} payments on this invoice; "
+                    f"emailed latest. Others: {others}"
+                )
+            else:
+                note_multiple = ""
+        else:
+            note_multiple = ""
+            try:
+                pay_result = await client.get_payment(resolved_payment_id)
+                payment_meta = pay_result.get("data", pay_result)
+            except Exception:
+                payment_meta = {"id": resolved_payment_id}
+
+        if invoice_id:
+            try:
+                inv_result = await client.get_invoice(invoice_id)
+                inv = Invoice(**inv_result.get("data", inv_result))
+                invoice_number = inv.get_invoice_number()
+            except Exception:
+                invoice_number = None
+
+        await client.email_payment_receipt(resolved_payment_id)
+
+        amount = payment_meta.get("amount")
+        currency_id = payment_meta.get("currency_id")
+        output = [
+            "✅ Payment receipt emailed to client contact(s)!\n",
+            f"Payment ID: {resolved_payment_id}",
+        ]
+        if payment_meta.get("number"):
+            output.append(f"Payment #: {payment_meta['number']}")
+        if invoice_number:
+            output.append(f"Invoice #: {invoice_number}")
+        elif invoice_id:
+            output.append(f"Invoice ID: {invoice_id}")
+        if amount is not None:
+            output.append(f"Amount: {await money(float(amount), currency_id)}")
+        if payment_meta.get("date"):
+            output.append(f"Payment date: {payment_meta['date']}")
+        if payment_meta.get("transaction_reference"):
+            output.append(f"Reference: {payment_meta['transaction_reference']}")
+        output.append(
+            "\nOnly the payment receipt was sent (not the invoice email)."
+        )
+        if note_multiple:
+            output.append(note_multiple)
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error emailing payment receipt: {str(e)}"
+
+
+def _format_email_history_entries(histories: list, limit: int = 25) -> list[str]:
+    """Format Invoice Ninja SystemLog mail history objects for display."""
+    if not histories:
+        return ["No email history entries found."]
+
+    output: list[str] = [f"Found {len(histories)} email history record(s):\n"]
+    for i, history in enumerate(histories[:limit], 1):
+        if not isinstance(history, dict):
+            output.append(f"{i}. {history}")
+            continue
+
+        entity = history.get("entity") or history.get("entity_type") or "?"
+        entity_id = history.get("entity_id") or ""
+        subject = history.get("subject") or history.get("email_subject") or ""
+        recipient = (
+            history.get("recipient")
+            or history.get("to")
+            or history.get("email")
+            or ""
+        )
+        message_id = history.get("message_id") or history.get("messageid") or ""
+
+        header = f"{i}. {entity}"
+        if entity_id:
+            header += f" ({entity_id})"
+        output.append(header)
+        if subject:
+            output.append(f"   Subject: {subject}")
+        if recipient:
+            output.append(f"   To: {recipient}")
+        if message_id:
+            output.append(f"   Message-ID: {message_id}")
+
+        events = history.get("events") or []
+        if events:
+            output.append("   Events:")
+            for event in events[:10]:
+                if isinstance(event, dict):
+                    etype = (
+                        event.get("type")
+                        or event.get("event")
+                        or event.get("status")
+                        or "event"
+                    )
+                    when = (
+                        event.get("date")
+                        or event.get("timestamp")
+                        or event.get("time")
+                        or ""
+                    )
+                    detail = event.get("message") or event.get("recipient") or ""
+                    line = f"     • {etype}"
+                    if when:
+                        line += f" @ {when}"
+                    if detail:
+                        line += f" — {detail}"
+                    output.append(line)
+                else:
+                    output.append(f"     • {event}")
+        else:
+            # Fall back to compact JSON for unexpected shapes
+            keys = ", ".join(sorted(history.keys())[:12])
+            output.append(f"   Keys: {keys}")
+
+    if len(histories) > limit:
+        output.append(f"\n…and {len(histories) - limit} more.")
+
+    return output
+
+
+@mcp.tool()
+async def get_client_email_history(client_id: str) -> str:
+    """
+    List mail delivery history for a client (Invoice Ninja SystemLog).
+
+    Includes invoice emails, payment receipts, and other mail events that
+    Invoice Ninja logged with delivery tracking for this client.
+
+    Args:
+        client_id: Hashed client ID
+
+    Returns:
+        Formatted email history, or an error message
+    """
+    try:
+        result = await client.get_client_email_history(client_id)
+        histories = result if isinstance(result, list) else result.get("data", result)
+        if not isinstance(histories, list):
+            histories = [histories] if histories else []
+        return "\n".join(_format_email_history_entries(histories))
+    except Exception as e:
+        return f"❌ Error fetching client email history: {str(e)}"
+
+
+@mcp.tool()
+async def get_entity_email_history(entity: str, entity_id: str) -> str:
+    """
+    List mail delivery history for a specific entity.
+
+    Uses POST /api/v1/emails/entityHistory. Supported entity values:
+    invoice, quote, credit, recurring_invoice, purchase_order.
+    Payment is not supported by Invoice Ninja's API — use
+    get_client_email_history for payment receipt mail.
+
+    Args:
+        entity: Entity type (e.g. invoice)
+        entity_id: Hashed entity ID
+
+    Returns:
+        Formatted email history, or an error message
+    """
+    try:
+        allowed = {
+            "invoice",
+            "quote",
+            "credit",
+            "recurring_invoice",
+            "purchase_order",
+        }
+        entity_norm = entity.strip().lower()
+        if entity_norm not in allowed:
+            return (
+                f"❌ Unsupported entity '{entity}'. "
+                f"Use one of: {', '.join(sorted(allowed))} "
+                "(for payment receipts, use get_client_email_history)."
+            )
+
+        result = await client.get_entity_email_history(entity_norm, entity_id)
+        histories = result if isinstance(result, list) else result.get("data", result)
+        if not isinstance(histories, list):
+            histories = [histories] if histories else []
+        return "\n".join(_format_email_history_entries(histories))
+    except Exception as e:
+        return f"❌ Error fetching entity email history: {str(e)}"
+
+
+@mcp.tool()
+async def get_invoice_email_history(invoice_id: str) -> str:
+    """
+    Email history for an invoice: invitation delivery status + SystemLog history.
+
+    Invitation fields (sent/viewed/email_status) are always available on the
+    invoice. SystemLog history adds provider delivery events when present.
+
+    Args:
+        invoice_id: Hashed invoice ID
+
+    Returns:
+        Formatted invitation + email history, or an error message
+    """
+    try:
+        inv_result = await client.get_invoice(invoice_id)
+        inv_data = inv_result.get("data", inv_result)
+        inv = Invoice(**inv_data)
+
+        output = [
+            f"📧 Invoice #{inv.get_invoice_number()} (ID: {inv.id})",
+            f"Status: {inv.get_status_name()}",
+            "",
+            "Invitations:",
+        ]
+
+        invitations = inv_data.get("invitations") or []
+        if not invitations:
+            output.append("  (none)")
+        else:
+            for inv_n, invitation in enumerate(invitations, 1):
+                output.append(f"  {inv_n}. Invitation {invitation.get('id', '')}")
+                if invitation.get("sent_date"):
+                    output.append(f"     Sent: {invitation['sent_date']}")
+                if invitation.get("viewed_date"):
+                    output.append(f"     Viewed: {invitation['viewed_date']}")
+                if invitation.get("email_status"):
+                    output.append(f"     Email status: {invitation['email_status']}")
+                if invitation.get("email_error"):
+                    output.append(f"     Email detail: {invitation['email_error']}")
+                if invitation.get("message_id"):
+                    output.append(f"     Message-ID: {invitation['message_id']}")
+
+        output.append("")
+        output.append("SystemLog mail history:")
+        try:
+            result = await client.get_entity_email_history("invoice", invoice_id)
+            histories = (
+                result if isinstance(result, list) else result.get("data", result)
+            )
+            if not isinstance(histories, list):
+                histories = [histories] if histories else []
+            if not histories:
+                output.append("  No SystemLog history entries for this invoice.")
+            else:
+                output.extend(_format_email_history_entries(histories))
+        except Exception as hist_err:
+            output.append(f"  (Could not load SystemLog history: {hist_err})")
+
+        return "\n".join(output)
+    except Exception as e:
+        return f"❌ Error fetching invoice email history: {str(e)}"
 
 
 @mcp.tool()
@@ -457,7 +891,7 @@ async def list_expenses(
         for exp_data in expenses_data:
             exp = Expense(**exp_data)
             output.append(f"\n💳 Expense (ID: {exp.id})")
-            output.append(f"   Amount: ${exp.amount:.2f}")
+            output.append(f"   Amount: {await money(exp.amount, exp.currency_id)}")
             if exp.expense_date:
                 output.append(f"   Date: {exp.expense_date}")
             if exp.vendor_id:
@@ -479,7 +913,7 @@ async def get_expense(expense_id: str) -> str:
 
         output = ["💳 Expense Details\n"]
         output.append(f"ID: {exp.id}")
-        output.append(f"Amount: ${exp.amount:.2f}")
+        output.append(f"Amount: {await money(exp.amount, exp.currency_id)}")
 
         if exp.expense_date:
             output.append(f"Date: {exp.expense_date}")
@@ -682,7 +1116,7 @@ async def create_expense(
         exp_data = result.get("data", result)
         exp = Expense(**exp_data)
 
-        return f"✅ Expense created successfully!\nID: {exp.id}\nAmount: ${exp.amount:.2f}\nDate: {exp.expense_date}"
+        return f"✅ Expense created successfully!\nID: {exp.id}\nAmount: {await money(exp.amount, exp.currency_id)}\nDate: {exp.expense_date}"
     except Exception as e:
         return f"❌ Error creating expense: {str(e)}"
 
@@ -697,7 +1131,7 @@ async def update_expense(expense_id: str, expense_data: str) -> str:
 
         output = [f"✅ Expense updated successfully!\n"]
         output.append(f"ID: {exp.id}")
-        output.append(f"Amount: ${exp.amount:.2f}")
+        output.append(f"Amount: {await money(exp.amount, exp.currency_id)}")
         if exp.expense_date:
             output.append(f"Date: {exp.expense_date}")
         if exp.vendor_id:
@@ -909,8 +1343,12 @@ async def create_invoice(
         output = [f"✅ Invoice created successfully!\n"]
         output.append(f"Invoice #{inv.get_invoice_number()} (ID: {inv.id})")
         output.append(f"Status: {inv.get_status_name()}")
-        output.append(f"Total (incl. tax): ${inv.get_amount_incl_tax():.2f}")
-        output.append(f"Total (excl. tax): ${inv.get_amount_excl_tax():.2f}")
+        output.append(
+            f"Total (incl. tax): {await money(inv.get_amount_incl_tax(), inv.currency_id)}"
+        )
+        output.append(
+            f"Total (excl. tax): {await money(inv.get_amount_excl_tax(), inv.currency_id)}"
+        )
         if inv.date:
             output.append(f"Date: {inv.date}")
         if inv.due_date:
